@@ -66,21 +66,19 @@ async function fetchMetalPrice(slug: string): Promise<LivePrice | null> {
     if (!res.ok) return null;
     const data = await res.json();
 
-    // A variação de 24h para metais exige o endpoint de histórico (com chave).
-    // Sem chave configurada, mostramos 0 (sem variação) em vez de quebrar o site.
     let change = 0;
     if (process.env.GOLD_API_KEY) {
       const now = Math.floor(Date.now() / 1000);
-      const yesterday = now - 24 * 60 * 60;
+      const twoDaysAgo = now - 2 * 24 * 60 * 60;
       try {
         const histRes = await fetch(
-          `https://api.gold-api.com/history?symbol=${symbol}&startTimestamp=${yesterday}&endTimestamp=${now}&groupBy=hour&aggregation=avg&orderBy=asc`,
+          `https://api.gold-api.com/history?symbol=${symbol}&startTimestamp=${twoDaysAgo}&endTimestamp=${now}&groupBy=day&aggregation=avg&orderBy=asc`,
           { headers: { 'x-api-key': process.env.GOLD_API_KEY }, next: { revalidate: 300 } }
         );
         if (histRes.ok) {
           const hist = await histRes.json();
           if (hist.length >= 2) {
-            const first = hist[0].avg_price;
+            const first = hist[hist.length - 2].avg_price;
             const last = hist[hist.length - 1].avg_price;
             change = ((last - first) / first) * 100;
           }
@@ -100,8 +98,6 @@ export async function fetchLivePrice(slug: string): Promise<LivePrice | null> {
   return isCrypto(slug) ? fetchCryptoPrice(slug) : fetchMetalPrice(slug);
 }
 
-// --- histórico (para o replay) ---
-
 // --- candles (OHLC) para o replay com gráfico de velas ---
 
 export async function fetchCandles(slug: string, days: number): Promise<Candle[] | null> {
@@ -114,7 +110,6 @@ export async function fetchCandles(slug: string, days: number): Promise<Candle[]
       );
       if (!res.ok) return null;
       const data = await res.json();
-      // formato: [ [timestamp, open, high, low, close], ... ]
       return (data as number[][]).map(([ts, open, high, low, close]) => ({
         date: new Date(ts).toISOString().slice(0, 10),
         open,
@@ -127,11 +122,6 @@ export async function fetchCandles(slug: string, days: number): Promise<Candle[]
     }
   }
 
-  // Metais: a API gratuita não oferece OHLC intradiário por dia,
-  // então montamos "candles" a partir da média diária (open = média
-  // do dia anterior, close = média do dia). É uma aproximação, não
-  // um candle real intradiário — mas mantém a lógica de "atingiu o
-  // nível" funcionando corretamente.
   const history = await fetchHistory(slug, days);
   if (!history || history.length < 2) return null;
 
@@ -169,7 +159,6 @@ export async function fetchHistory(slug: string, days: number): Promise<PricePoi
     }
   }
 
-  // metais precisam da chave para histórico
   if (!process.env.GOLD_API_KEY) return null;
 
   const symbol = METAL_SYMBOLS[slug];
