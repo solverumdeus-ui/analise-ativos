@@ -34,7 +34,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         </div>
         <main className="container">{children}</main>
         <div className="container">
-          <Footer /> {new Date().getFullYear()} — análises publicadas para fins educacionais, não são recomendação de investimento.</footer>
+          <Footer />
         </div>
       </body>
     </html>
