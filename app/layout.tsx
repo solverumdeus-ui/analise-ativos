@@ -2,6 +2,7 @@ import './globals.css';
 import Link from 'next/link';
 import Ticker from '@/components/Ticker';
 import Logo from '@/components/Logo';
+import Footer from '@/components/Footer';
 import { getAssets } from '@/lib/assets';
 
 export const metadata = {
