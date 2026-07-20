@@ -108,8 +108,15 @@ export async function fetchCandles(slug: string, days: number): Promise<Candle[]
         `https://api.coingecko.com/api/v3/coins/${id}/ohlc?vs_currency=usd&days=${days}`,
         { next: { revalidate: 3600 } }
       );
-      if (!res.ok) return null;
+      if (!res.ok) {
+        console.error(`[fetchCandles] CoinGecko OHLC falhou para ${id}: status ${res.status}`);
+        return null;
+      }
       const data = await res.json();
+      if (!Array.isArray(data)) {
+        console.error(`[fetchCandles] CoinGecko OHLC retornou formato inesperado para ${id}:`, JSON.stringify(data).slice(0, 300));
+        return null;
+      }
       return (data as number[][]).map(([ts, open, high, low, close]) => ({
         date: new Date(ts).toISOString().slice(0, 10),
         open,
@@ -117,7 +124,8 @@ export async function fetchCandles(slug: string, days: number): Promise<Candle[]
         low,
         close,
       }));
-    } catch {
+    } catch (err) {
+      console.error(`[fetchCandles] erro de rede para ${id}:`, err);
       return null;
     }
   }
