@@ -12,7 +12,7 @@ import 'chartjs-adapter-date-fns';
 import {
   CandlestickController,
   CandlestickElement,
-} from 'chartjs-plugin-financial';
+} from 'chartjs-chart-financial';
 import type { Candle } from '@/lib/prices';
 
 Chart.register(LinearScale, TimeScale, Tooltip, CandlestickController, CandlestickElement);
