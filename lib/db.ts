@@ -100,6 +100,38 @@ export async function createPost(input: {
   return mapPost(rows[0]);
 }
 
+export async function updatePost(
+  slug: string,
+  input: {
+    title?: string;
+    content?: string;
+    asset?: string;
+    tag?: string;
+    nivelAlvo?: number | null;
+    direcao?: 'alta' | 'baixa' | null;
+    imageUrl?: string | null;
+    videoUrl?: string | null;
+  }
+): Promise<Post | null> {
+  const current = await getPostBySlug(slug);
+  if (!current) return null;
+
+  const rows = await getSql()`
+    UPDATE posts SET
+      title = ${input.title ?? current.title},
+      content = ${input.content ?? current.content},
+      asset = ${input.asset ?? current.asset},
+      tag = ${input.tag ?? current.tag},
+      nivel_alvo = ${input.nivelAlvo !== undefined ? input.nivelAlvo : current.nivelAlvo},
+      direcao = ${input.direcao !== undefined ? input.direcao : current.direcao},
+      image_url = ${input.imageUrl !== undefined ? input.imageUrl : current.imageUrl},
+      video_url = ${input.videoUrl !== undefined ? input.videoUrl : current.videoUrl}
+    WHERE slug = ${slug}
+    RETURNING *
+  `;
+  return mapPost(rows[0]);
+}
+
 export async function getComments(postSlug: string): Promise<Comment[]> {
   const rows = await getSql()`
     SELECT * FROM comments WHERE post_slug = ${postSlug} ORDER BY created_at ASC
