@@ -28,18 +28,38 @@ const labelStyle: React.CSSProperties = {
   marginBottom: 6,
 };
 
-export default function AnalysisEditor({ onPublished }: { onPublished?: () => void }) {
+type ExistingPost = {
+  slug: string;
+  title: string;
+  content: string;
+  asset: string;
+  tag: string;
+  nivelAlvo: number | null;
+  direcao: 'alta' | 'baixa' | null;
+  imageUrl: string | null;
+  videoUrl: string | null;
+};
+
+type Props = {
+  onPublished?: () => void;
+  editPost?: ExistingPost;
+  triggerLabel?: string;
+};
+
+export default function AnalysisEditor({ onPublished, editPost, triggerLabel }: Props) {
   const router = useRouter();
+  const isEditMode = !!editPost;
+
   const [isOpen, setIsOpen] = useState(false);
   const [password, setPassword] = useState('');
-  const [title, setTitle] = useState('');
-  const [content, setContent] = useState('');
-  const [asset, setAsset] = useState('BTC');
-  const [tag, setTag] = useState('análise técnica');
-  const [nivelAlvo, setNivelAlvo] = useState('');
-  const [direcao, setDirecao] = useState<'alta' | 'baixa'>('alta');
-  const [imageUrl, setImageUrl] = useState('');
-  const [videoUrl, setVideoUrl] = useState('');
+  const [title, setTitle] = useState(editPost?.title ?? '');
+  const [content, setContent] = useState(editPost?.content ?? '');
+  const [asset, setAsset] = useState(editPost?.asset ?? 'BTC');
+  const [tag, setTag] = useState(editPost?.tag ?? 'análise técnica');
+  const [nivelAlvo, setNivelAlvo] = useState(editPost?.nivelAlvo?.toString() ?? '');
+  const [direcao, setDirecao] = useState<'alta' | 'baixa'>(editPost?.direcao ?? 'alta');
+  const [imageUrl, setImageUrl] = useState(editPost?.imageUrl ?? '');
+  const [videoUrl, setVideoUrl] = useState(editPost?.videoUrl ?? '');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -48,35 +68,42 @@ export default function AnalysisEditor({ onPublished }: { onPublished?: () => vo
     setIsLoading(true);
     setError('');
 
+    const payload = {
+      password,
+      title,
+      content,
+      asset,
+      tag,
+      nivelAlvo: nivelAlvo ? Number(nivelAlvo) : undefined,
+      direcao: nivelAlvo ? direcao : undefined,
+      imageUrl: imageUrl || undefined,
+      videoUrl: videoUrl || undefined,
+    };
+
     try {
-      const res = await fetch('/api/posts', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          password,
-          title,
-          content,
-          asset,
-          tag,
-          nivelAlvo: nivelAlvo ? Number(nivelAlvo) : undefined,
-          direcao: nivelAlvo ? direcao : undefined,
-          imageUrl: imageUrl || undefined,
-          videoUrl: videoUrl || undefined,
-        }),
-      });
+      const res = await fetch(
+        isEditMode ? `/api/posts/${editPost!.slug}` : '/api/posts',
+        {
+          method: isEditMode ? 'PATCH' : 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        }
+      );
 
       const data = await res.json();
 
       if (!res.ok) {
-        setError(data.error || 'Erro ao publicar.');
+        setError(data.error || 'Erro ao salvar.');
         return;
       }
 
-      setTitle('');
-      setContent('');
-      setNivelAlvo('');
-      setImageUrl('');
-      setVideoUrl('');
+      if (!isEditMode) {
+        setTitle('');
+        setContent('');
+        setNivelAlvo('');
+        setImageUrl('');
+        setVideoUrl('');
+      }
       setIsOpen(false);
       router.refresh();
       onPublished?.();
@@ -92,18 +119,18 @@ export default function AnalysisEditor({ onPublished }: { onPublished?: () => vo
       <button
         onClick={() => setIsOpen(true)}
         style={{
-          padding: '10px 20px',
-          background: 'var(--accent)',
-          color: '#0b0e11',
-          border: 'none',
+          padding: isEditMode ? '8px 16px' : '10px 20px',
+          background: isEditMode ? 'var(--surface)' : 'var(--accent)',
+          color: isEditMode ? 'var(--text-primary)' : '#0b0e11',
+          border: isEditMode ? '1px solid var(--border-strong)' : 'none',
           borderRadius: 8,
           cursor: 'pointer',
-          fontSize: 14,
+          fontSize: 13,
           fontWeight: 600,
-          marginBottom: 24,
+          marginBottom: isEditMode ? 0 : 24,
         }}
       >
-        + Publicar nova análise
+        {triggerLabel ?? (isEditMode ? '✎ Editar análise' : '+ Publicar nova análise')}
       </button>
     );
   }
@@ -119,7 +146,9 @@ export default function AnalysisEditor({ onPublished }: { onPublished?: () => vo
       }}
     >
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-        <h2 style={{ margin: 0, fontSize: 18, fontFamily: 'var(--font-display)' }}>Publicar nova análise</h2>
+        <h2 style={{ margin: 0, fontSize: 18, fontFamily: 'var(--font-display)' }}>
+          {isEditMode ? 'Editar análise' : 'Publicar nova análise'}
+        </h2>
         <button
           onClick={() => setIsOpen(false)}
           style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: 'var(--text-secondary)' }}
@@ -262,7 +291,7 @@ export default function AnalysisEditor({ onPublished }: { onPublished?: () => vo
               fontWeight: 600,
             }}
           >
-            {isLoading ? 'Publicando...' : 'Publicar'}
+            {isLoading ? 'Salvando...' : isEditMode ? 'Salvar alterações' : 'Publicar'}
           </button>
         </div>
       </form>
