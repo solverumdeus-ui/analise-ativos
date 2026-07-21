@@ -206,7 +206,10 @@ export async function fetchHistory(slug: string, days: number): Promise<PricePoi
   }
 
   // metais precisam da chave para histórico
-  if (!process.env.GOLD_API_KEY) return null;
+  if (!process.env.GOLD_API_KEY) {
+    console.error('[fetchHistory] GOLD_API_KEY não configurada.');
+    return null;
+  }
 
   const symbol = METAL_SYMBOLS[slug];
   const now = Math.floor(Date.now() / 1000);
@@ -217,13 +220,22 @@ export async function fetchHistory(slug: string, days: number): Promise<PricePoi
       `https://api.gold-api.com/history?symbol=${symbol}&startTimestamp=${start}&endTimestamp=${now}&groupBy=day&aggregation=avg&orderBy=asc`,
       { headers: { 'x-api-key': process.env.GOLD_API_KEY }, next: { revalidate: 3600 } }
     );
-    if (!res.ok) return null;
+    if (!res.ok) {
+      const body = await res.text();
+      console.error(`[fetchHistory] gold-api falhou para ${symbol}: status ${res.status} — ${body.slice(0, 300)}`);
+      return null;
+    }
     const data = await res.json();
+    if (!Array.isArray(data)) {
+      console.error(`[fetchHistory] gold-api retornou formato inesperado para ${symbol}:`, JSON.stringify(data).slice(0, 300));
+      return null;
+    }
     return (data as { day: string; avg_price: number }[]).map((d) => ({
       date: d.day,
       price: d.avg_price,
     }));
-  } catch {
+  } catch (err) {
+    console.error(`[fetchHistory] erro de rede para ${symbol}:`, err);
     return null;
   }
 }
