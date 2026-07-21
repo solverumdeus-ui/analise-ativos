@@ -3,6 +3,7 @@ import { fetchCandles } from '@/lib/prices';
 import ReplayChart from '@/components/ReplayChart';
 import Comments from '@/components/Comments';
 import AnalysisEditor from '@/components/AnalysisEditor';
+import DeletePostButton from '@/components/DeletePostButton';
 import { notFound } from 'next/navigation';
 import { remark } from 'remark';
 import html from 'remark-html';
@@ -35,7 +36,7 @@ export default async function PostPage({ params }: { params: { slug: string } })
         <p className="post-meta">
           {post.tag} · {dateLabel} · por {post.author}
         </p>
-        <div style={{ marginTop: 14 }}>
+        <div style={{ marginTop: 14, display: 'flex', alignItems: 'center' }}>
           <AnalysisEditor
             editPost={{
               slug: post.slug,
@@ -49,6 +50,7 @@ export default async function PostPage({ params }: { params: { slug: string } })
               videoUrl: post.videoUrl,
             }}
           />
+          <DeletePostButton slug={post.slug} />
         </div>
       </div>
 
