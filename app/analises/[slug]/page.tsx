@@ -16,9 +16,11 @@ export default async function PostPage({ params }: { params: { slug: string } })
   const contentHtml = processed.toString();
 
   const slug = post.asset.toLowerCase();
+  const createdAtDate = new Date(post.createdAt);
+  const createdAtIso = createdAtDate.toISOString().slice(0, 10);
   const candles = post.nivelAlvo ? ((await fetchCandles(slug, 30)) ?? []) : [];
 
-  const dateLabel = new Date(post.createdAt).toLocaleDateString('pt-BR', {
+  const dateLabel = createdAtDate.toLocaleDateString('pt-BR', {
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
@@ -53,7 +55,7 @@ export default async function PostPage({ params }: { params: { slug: string } })
       {post.nivelAlvo && (
         <ReplayChart
           candles={candles}
-          calledDate={post.createdAt.slice(0, 10)}
+          calledDate={createdAtIso}
           nivelAlvo={post.nivelAlvo}
           direcao={post.direcao ?? undefined}
         />
