@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { updatePost } from '@/lib/db';
+import { updatePost, deletePost } from '@/lib/db';
 
 export async function PATCH(req: NextRequest, { params }: { params: { slug: string } }) {
   try {
@@ -36,5 +36,33 @@ export async function PATCH(req: NextRequest, { params }: { params: { slug: stri
   } catch (err) {
     console.error('[api/posts/[slug] PATCH]', err);
     return NextResponse.json({ error: 'Erro ao salvar alterações.' }, { status: 500 });
+  }
+}
+
+export async function DELETE(req: NextRequest, { params }: { params: { slug: string } }) {
+  try {
+    const body = await req.json();
+    const { password } = body;
+
+    if (!process.env.ADMIN_PASSWORD) {
+      return NextResponse.json(
+        { error: 'Servidor sem senha de administrador configurada.' },
+        { status: 500 }
+      );
+    }
+
+    if (password !== process.env.ADMIN_PASSWORD) {
+      return NextResponse.json({ error: 'Senha incorreta.' }, { status: 401 });
+    }
+
+    const deleted = await deletePost(params.slug);
+    if (!deleted) {
+      return NextResponse.json({ error: 'Análise não encontrada.' }, { status: 404 });
+    }
+
+    return NextResponse.json({ ok: true });
+  } catch (err) {
+    console.error('[api/posts/[slug] DELETE]', err);
+    return NextResponse.json({ error: 'Erro ao excluir análise.' }, { status: 500 });
   }
 }
