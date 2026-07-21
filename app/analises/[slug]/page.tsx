@@ -1,27 +1,28 @@
-import { getAllPosts, getPostBySlug } from '@/lib/posts';
+import { getPostBySlug } from '@/lib/db';
 import { fetchCandles } from '@/lib/prices';
 import ReplayChart from '@/components/ReplayChart';
+import Comments from '@/components/Comments';
 import { notFound } from 'next/navigation';
+import { remark } from 'remark';
+import html from 'remark-html';
 
-export const revalidate = 3600;
-
-export async function generateStaticParams() {
-  const posts = getAllPosts();
-  return posts.map((p) => ({ slug: p.slug }));
-}
+export const dynamic = 'force-dynamic';
 
 export default async function PostPage({ params }: { params: { slug: string } }) {
-  let post;
-  try {
-    post = await getPostBySlug(params.slug);
-  } catch {
-    notFound();
-  }
-
+  const post = await getPostBySlug(params.slug);
   if (!post) return notFound();
 
+  const processed = await remark().use(html).process(post.content);
+  const contentHtml = processed.toString();
+
   const slug = post.asset.toLowerCase();
-  const candles = (await fetchCandles(slug, 30)) ?? [];
+  const candles = post.nivelAlvo ? ((await fetchCandles(slug, 30)) ?? []) : [];
+
+  const dateLabel = new Date(post.createdAt).toLocaleDateString('pt-BR', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  });
 
   return (
     <article>
@@ -29,20 +30,38 @@ export default async function PostPage({ params }: { params: { slug: string } })
         <span className="post-tag">{post.asset}</span>
         <h1>{post.title}</h1>
         <p className="post-meta">
-          {post.tag} · {post.date}
+          {post.tag} · {dateLabel} · por {post.author}
         </p>
       </div>
+
+      {post.imageUrl && (
+        <img
+          src={post.imageUrl}
+          alt=""
+          style={{ width: '100%', borderRadius: 10, border: '1px solid var(--border)', marginBottom: 20 }}
+        />
+      )}
+
+      {post.videoUrl && (
+        <p style={{ marginBottom: 20 }}>
+          <a href={post.videoUrl} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent)' }}>
+            ▶ ver vídeo relacionado
+          </a>
+        </p>
+      )}
 
       {post.nivelAlvo && (
         <ReplayChart
           candles={candles}
-          calledDate={post.date}
+          calledDate={post.createdAt.slice(0, 10)}
           nivelAlvo={post.nivelAlvo}
-          direcao={post.direcao}
+          direcao={post.direcao ?? undefined}
         />
       )}
 
-      <div className="post-body" dangerouslySetInnerHTML={{ __html: post.contentHtml }} />
+      <div className="post-body" dangerouslySetInnerHTML={{ __html: contentHtml }} />
+
+      <Comments postSlug={post.slug} />
     </article>
   );
 }

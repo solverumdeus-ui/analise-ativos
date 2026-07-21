@@ -6,9 +6,6 @@ import {
   LinearScale,
   TimeScale,
   Tooltip,
-  LineController,
-  PointElement,
-  LineElement,
   type ChartConfiguration,
 } from 'chart.js';
 import 'chartjs-adapter-date-fns';
@@ -18,7 +15,7 @@ import {
 } from 'chartjs-chart-financial';
 import type { Candle } from '@/lib/prices';
 
-Chart.register(LinearScale, TimeScale, Tooltip, LineController, PointElement, LineElement, CandlestickController, CandlestickElement);
+Chart.register(LinearScale, TimeScale, Tooltip, CandlestickController, CandlestickElement);
 
 type Props = {
   candles: Candle[];

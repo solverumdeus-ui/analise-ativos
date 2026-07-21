@@ -1,312 +1,237 @@
 'use client';
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 
-type Analysis = {
-  id: string;
-  title: string;
-  content: string;
-  asset: string;
-  images: string[];
-  videoUrl?: string;
-  createdAt: string;
-  author: string;
+const ASSETS = [
+  { value: 'BTC', label: 'Bitcoin (BTC)' },
+  { value: 'XAU', label: 'Ouro (XAU)' },
+  { value: 'XAG', label: 'Prata (XAG)' },
+  { value: 'XRP', label: 'XRP' },
+];
+
+const inputStyle: React.CSSProperties = {
+  width: '100%',
+  padding: '10px 12px',
+  border: '1px solid var(--border)',
+  borderRadius: 6,
+  background: 'var(--bg)',
+  color: 'var(--text-primary)',
+  fontSize: 14,
+  boxSizing: 'border-box',
 };
 
-export default function AnalysisEditor({ onSubmit }: { onSubmit: (analysis: Analysis) => void }) {
+const labelStyle: React.CSSProperties = {
+  display: 'block',
+  fontSize: 13,
+  color: 'var(--text-secondary)',
+  marginBottom: 6,
+};
+
+export default function AnalysisEditor({ onPublished }: { onPublished?: () => void }) {
+  const router = useRouter();
   const [isOpen, setIsOpen] = useState(false);
+  const [password, setPassword] = useState('');
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [asset, setAsset] = useState('BTC');
-  const [author, setAuthor] = useState('');
-  const [images, setImages] = useState<string[]>([]);
+  const [tag, setTag] = useState('análise técnica');
+  const [nivelAlvo, setNivelAlvo] = useState('');
+  const [direcao, setDirecao] = useState<'alta' | 'baixa'>('alta');
+  const [imageUrl, setImageUrl] = useState('');
   const [videoUrl, setVideoUrl] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState('');
 
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (files) {
-      Array.from(files).forEach((file) => {
-        const reader = new FileReader();
-        reader.onload = (event) => {
-          if (event.target?.result) {
-            setImages((prev) => [...prev, event.target.result as string]);
-          }
-        };
-        reader.readAsDataURL(file);
-      });
-    }
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setIsLoading(true);
-
-    const analysis: Analysis = {
-      id: Date.now().toString(),
-      title,
-      content,
-      asset,
-      images,
-      videoUrl: videoUrl || undefined,
-      createdAt: new Date().toISOString(),
-      author,
-    };
+    setError('');
 
     try {
-      // Salvar no localStorage (para demo)
-      const analyses = JSON.parse(localStorage.getItem('analyses') || '[]');
-      analyses.push(analysis);
-      localStorage.setItem('analyses', JSON.stringify(analyses));
+      const res = await fetch('/api/posts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          password,
+          title,
+          content,
+          asset,
+          tag,
+          nivelAlvo: nivelAlvo ? Number(nivelAlvo) : undefined,
+          direcao: nivelAlvo ? direcao : undefined,
+          imageUrl: imageUrl || undefined,
+          videoUrl: videoUrl || undefined,
+        }),
+      });
 
-      onSubmit(analysis);
+      const data = await res.json();
 
-      // Limpar formulário
+      if (!res.ok) {
+        setError(data.error || 'Erro ao publicar.');
+        return;
+      }
+
       setTitle('');
       setContent('');
-      setAsset('BTC');
-      setAuthor('');
-      setImages([]);
+      setNivelAlvo('');
+      setImageUrl('');
       setVideoUrl('');
       setIsOpen(false);
-    } catch (error) {
-      console.error('Erro ao salvar análise:', error);
+      router.refresh();
+      onPublished?.();
+    } catch {
+      setError('Erro de conexão. Tente novamente.');
     } finally {
       setIsLoading(false);
     }
-  };
+  }
 
   if (!isOpen) {
     return (
       <button
         onClick={() => setIsOpen(true)}
         style={{
-          padding: '12px 24px',
+          padding: '10px 20px',
           background: 'var(--accent)',
-          color: 'white',
+          color: '#0b0e11',
           border: 'none',
           borderRadius: 8,
           cursor: 'pointer',
           fontSize: 14,
-          fontWeight: 500,
+          fontWeight: 600,
           marginBottom: 24,
         }}
       >
-        + Criar Análise
+        + Publicar nova análise
       </button>
     );
   }
 
   return (
-    <div style={{
-      background: 'var(--surface)',
-      border: '1px solid var(--border)',
-      borderRadius: 12,
-      padding: 24,
-      marginBottom: 32,
-    }}>
+    <div
+      style={{
+        background: 'var(--surface)',
+        border: '1px solid var(--border)',
+        borderRadius: 12,
+        padding: 24,
+        marginBottom: 32,
+      }}
+    >
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-        <h2 style={{ margin: 0, fontSize: 20 }}>Criar Nova Análise</h2>
+        <h2 style={{ margin: 0, fontSize: 18, fontFamily: 'var(--font-display)' }}>Publicar nova análise</h2>
         <button
           onClick={() => setIsOpen(false)}
-          style={{
-            background: 'none',
-            border: 'none',
-            fontSize: 24,
-            cursor: 'pointer',
-            color: 'var(--text-secondary)',
-          }}
+          style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: 'var(--text-secondary)' }}
+          aria-label="Fechar"
         >
           ✕
         </button>
       </div>
 
       <form onSubmit={handleSubmit}>
-        {/* Nome do Autor */}
         <div style={{ marginBottom: 16 }}>
-          <label style={{ display: 'block', fontSize: 13, color: 'var(--text-secondary)', marginBottom: 6 }}>
-            Seu Nome
-          </label>
+          <label style={labelStyle}>Senha de administrador</label>
           <input
-            type="text"
-            value={author}
-            onChange={(e) => setAuthor(e.target.value)}
-            placeholder="Ex: João Silva"
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
             required
-            style={{
-              width: '100%',
-              padding: '10px 12px',
-              border: '1px solid var(--border)',
-              borderRadius: 6,
-              background: 'var(--background)',
-              color: 'var(--text-primary)',
-              fontSize: 14,
-              boxSizing: 'border-box',
-            }}
+            style={inputStyle}
           />
         </div>
 
-        {/* Título */}
         <div style={{ marginBottom: 16 }}>
-          <label style={{ display: 'block', fontSize: 13, color: 'var(--text-secondary)', marginBottom: 6 }}>
-            Título da Análise
-          </label>
+          <label style={labelStyle}>Título da análise</label>
           <input
             type="text"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            placeholder="Ex: Análise Técnica do Bitcoin"
+            placeholder="Ex: BTC testa suporte dos 100 mil"
             required
-            style={{
-              width: '100%',
-              padding: '10px 12px',
-              border: '1px solid var(--border)',
-              borderRadius: 6,
-              background: 'var(--background)',
-              color: 'var(--text-primary)',
-              fontSize: 14,
-              boxSizing: 'border-box',
-            }}
+            style={inputStyle}
           />
         </div>
 
-        {/* Ativo */}
-        <div style={{ marginBottom: 16 }}>
-          <label style={{ display: 'block', fontSize: 13, color: 'var(--text-secondary)', marginBottom: 6 }}>
-            Ativo
-          </label>
-          <select
-            value={asset}
-            onChange={(e) => setAsset(e.target.value)}
-            style={{
-              width: '100%',
-              padding: '10px 12px',
-              border: '1px solid var(--border)',
-              borderRadius: 6,
-              background: 'var(--background)',
-              color: 'var(--text-primary)',
-              fontSize: 14,
-              boxSizing: 'border-box',
-            }}
-          >
-            <option value="BTC">Bitcoin (BTC)</option>
-            <option value="XAU">Ouro (XAU)</option>
-            <option value="XAG">Prata (XAG)</option>
-            <option value="XRP">XRP</option>
-          </select>
+        <div style={{ display: 'flex', gap: 12, marginBottom: 16 }}>
+          <div style={{ flex: 1 }}>
+            <label style={labelStyle}>Ativo</label>
+            <select value={asset} onChange={(e) => setAsset(e.target.value)} style={inputStyle}>
+              {ASSETS.map((a) => (
+                <option key={a.value} value={a.value}>
+                  {a.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div style={{ flex: 1 }}>
+            <label style={labelStyle}>Tipo de análise</label>
+            <input type="text" value={tag} onChange={(e) => setTag(e.target.value)} style={inputStyle} />
+          </div>
         </div>
 
-        {/* Conteúdo */}
         <div style={{ marginBottom: 16 }}>
-          <label style={{ display: 'block', fontSize: 13, color: 'var(--text-secondary)', marginBottom: 6 }}>
-            Sua Análise
-          </label>
+          <label style={labelStyle}>Texto da análise (aceita Markdown)</label>
           <textarea
             value={content}
             onChange={(e) => setContent(e.target.value)}
             placeholder="Escreva sua análise aqui..."
             required
-            style={{
-              width: '100%',
-              padding: '12px',
-              border: '1px solid var(--border)',
-              borderRadius: 6,
-              background: 'var(--background)',
-              color: 'var(--text-primary)',
-              fontSize: 14,
-              minHeight: 200,
-              fontFamily: 'inherit',
-              boxSizing: 'border-box',
-              resize: 'vertical',
-            }}
+            style={{ ...inputStyle, minHeight: 180, fontFamily: 'inherit', resize: 'vertical' }}
           />
         </div>
 
-        {/* Upload de Imagens */}
+        <div style={{ display: 'flex', gap: 12, marginBottom: 16 }}>
+          <div style={{ flex: 1 }}>
+            <label style={labelStyle}>Nível-alvo (opcional, ativa o replay)</label>
+            <input
+              type="number"
+              value={nivelAlvo}
+              onChange={(e) => setNivelAlvo(e.target.value)}
+              placeholder="Ex: 112000"
+              style={inputStyle}
+            />
+          </div>
+          <div style={{ flex: 1 }}>
+            <label style={labelStyle}>Direção</label>
+            <select
+              value={direcao}
+              onChange={(e) => setDirecao(e.target.value as 'alta' | 'baixa')}
+              disabled={!nivelAlvo}
+              style={{ ...inputStyle, opacity: nivelAlvo ? 1 : 0.5 }}
+            >
+              <option value="alta">Alta</option>
+              <option value="baixa">Baixa</option>
+            </select>
+          </div>
+        </div>
+
         <div style={{ marginBottom: 16 }}>
-          <label style={{ display: 'block', fontSize: 13, color: 'var(--text-secondary)', marginBottom: 6 }}>
-            Adicionar Prints/Imagens
-          </label>
+          <label style={labelStyle}>Link de imagem (opcional)</label>
           <input
-            type="file"
-            multiple
-            accept="image/*"
-            onChange={handleImageUpload}
-            style={{
-              display: 'block',
-              marginBottom: 8,
-            }}
+            type="url"
+            value={imageUrl}
+            onChange={(e) => setImageUrl(e.target.value)}
+            placeholder="https://..."
+            style={inputStyle}
           />
-          {images.length > 0 && (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(100px, 1fr))', gap: 8 }}>
-              {images.map((img, idx) => (
-                <div
-                  key={idx}
-                  style={{
-                    position: 'relative',
-                    borderRadius: 6,
-                    overflow: 'hidden',
-                    background: 'var(--border)',
-                  }}
-                >
-                  <img
-                    src={img}
-                    alt={`preview-${idx}`}
-                    style={{
-                      width: '100%',
-                      height: 100,
-                      objectFit: 'cover',
-                    }}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setImages(images.filter((_, i) => i !== idx))}
-                    style={{
-                      position: 'absolute',
-                      top: 4,
-                      right: 4,
-                      background: 'rgba(0,0,0,0.6)',
-                      color: 'white',
-                      border: 'none',
-                      borderRadius: '50%',
-                      width: 24,
-                      height: 24,
-                      cursor: 'pointer',
-                      fontSize: 12,
-                    }}
-                  >
-                    ✕
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
         </div>
 
-        {/* URL do Vídeo */}
         <div style={{ marginBottom: 24 }}>
-          <label style={{ display: 'block', fontSize: 13, color: 'var(--text-secondary)', marginBottom: 6 }}>
-            Link do Vídeo (YouTube, Vimeo, etc)
-          </label>
+          <label style={labelStyle}>Link de vídeo (opcional)</label>
           <input
             type="url"
             value={videoUrl}
             onChange={(e) => setVideoUrl(e.target.value)}
-            placeholder="Ex: https://youtube.com/watch?v=..."
-            style={{
-              width: '100%',
-              padding: '10px 12px',
-              border: '1px solid var(--border)',
-              borderRadius: 6,
-              background: 'var(--background)',
-              color: 'var(--text-primary)',
-              fontSize: 14,
-              boxSizing: 'border-box',
-            }}
+            placeholder="https://youtube.com/watch?v=..."
+            style={inputStyle}
           />
         </div>
 
-        {/* Botões */}
+        {error && (
+          <p style={{ color: 'var(--down)', fontSize: 13, marginBottom: 16 }}>{error}</p>
+        )}
+
         <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end' }}>
           <button
             type="button"
@@ -325,19 +250,19 @@ export default function AnalysisEditor({ onSubmit }: { onSubmit: (analysis: Anal
           </button>
           <button
             type="submit"
-            disabled={isLoading || !title || !content || !author}
+            disabled={isLoading}
             style={{
               padding: '10px 20px',
               background: isLoading ? 'var(--border)' : 'var(--accent)',
-              color: 'white',
+              color: '#0b0e11',
               border: 'none',
               borderRadius: 6,
               cursor: isLoading ? 'not-allowed' : 'pointer',
               fontSize: 14,
-              fontWeight: 500,
+              fontWeight: 600,
             }}
           >
-            {isLoading ? 'Salvando...' : 'Publicar Análise'}
+            {isLoading ? 'Publicando...' : 'Publicar'}
           </button>
         </div>
       </form>

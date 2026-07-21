@@ -1,13 +1,13 @@
 import { getAssets } from '@/lib/assets';
-import { getAllPosts } from '@/lib/posts';
+import { getAllPosts } from '@/lib/db';
 import AssetCard from '@/components/AssetCard';
 import PostCard from '@/components/PostCard';
 
-export const revalidate = 300;
+export const dynamic = 'force-dynamic';
 
 export default async function Home() {
   const assets = await getAssets();
-  const posts = getAllPosts();
+  const posts = (await getAllPosts()).slice(0, 5);
 
   return (
     <>

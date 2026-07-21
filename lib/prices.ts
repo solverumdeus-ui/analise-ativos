@@ -104,6 +104,8 @@ async function fetchMetalPrice(slug: string): Promise<LivePrice | null> {
     if (!res.ok) return null;
     const data = await res.json();
 
+    // A variação de 24h para metais exige o endpoint de histórico (com chave).
+    // Sem chave configurada, mostramos 0 (sem variação) em vez de quebrar o site.
     let change = 0;
     if (process.env.GOLD_API_KEY) {
       const now = Math.floor(Date.now() / 1000);
@@ -135,6 +137,8 @@ async function fetchMetalPrice(slug: string): Promise<LivePrice | null> {
 export async function fetchLivePrice(slug: string): Promise<LivePrice | null> {
   return isCrypto(slug) ? fetchCryptoPrice(slug) : fetchMetalPrice(slug);
 }
+
+// --- histórico (para o replay) ---
 
 // --- candles (OHLC) para o replay com gráfico de velas ---
 

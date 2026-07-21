@@ -2,7 +2,6 @@ import './globals.css';
 import Link from 'next/link';
 import Ticker from '@/components/Ticker';
 import Logo from '@/components/Logo';
-import Footer from '@/components/Footer';
 import { getAssets } from '@/lib/assets';
 
 export const metadata = {
@@ -27,14 +26,14 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             </Link>
             <nav>
               <Link href="/">ativos</Link>
-              <Link href="/">análises</Link>
+              <Link href="/analises">análises</Link>
               <Link href="/sobre">sobre</Link>
             </nav>
           </header>
         </div>
         <main className="container">{children}</main>
         <div className="container">
-          <Footer />
+          <footer>© {new Date().getFullYear()} — análises publicadas para fins educacionais, não são recomendação de investimento.</footer>
         </div>
       </body>
     </html>
