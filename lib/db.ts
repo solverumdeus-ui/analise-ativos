@@ -131,7 +131,10 @@ export async function updatePost(
   `;
   return mapPost(rows[0]);
 }
-
+export async function deletePost(slug: string): Promise<boolean> {
+  const rows = await getSql()`DELETE FROM posts WHERE slug = ${slug} RETURNING slug`;
+  return rows.length > 0;
+}
 export async function getComments(postSlug: string): Promise<Comment[]> {
   const rows = await getSql()`
     SELECT * FROM comments WHERE post_slug = ${postSlug} ORDER BY created_at ASC
