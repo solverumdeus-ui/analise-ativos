@@ -2,6 +2,7 @@ import { getPostBySlug } from '@/lib/db';
 import { fetchCandles } from '@/lib/prices';
 import ReplayChart from '@/components/ReplayChart';
 import Comments from '@/components/Comments';
+import AnalysisEditor from '@/components/AnalysisEditor';
 import { notFound } from 'next/navigation';
 import { remark } from 'remark';
 import html from 'remark-html';
@@ -34,6 +35,21 @@ export default async function PostPage({ params }: { params: { slug: string } })
         <p className="post-meta">
           {post.tag} · {dateLabel} · por {post.author}
         </p>
+        <div style={{ marginTop: 14 }}>
+          <AnalysisEditor
+            editPost={{
+              slug: post.slug,
+              title: post.title,
+              content: post.content,
+              asset: post.asset,
+              tag: post.tag,
+              nivelAlvo: post.nivelAlvo,
+              direcao: post.direcao,
+              imageUrl: post.imageUrl,
+              videoUrl: post.videoUrl,
+            }}
+          />
+        </div>
       </div>
 
       {post.imageUrl && (
