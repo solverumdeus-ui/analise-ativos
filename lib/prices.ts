@@ -108,12 +108,16 @@ async function fetchMetalPrice(slug: string): Promise<LivePrice | null> {
     // Sem chave configurada, mostramos 0 (sem variação) em vez de quebrar o site.
     let change = 0;
     if (process.env.GOLD_API_KEY) {
-      const now = Math.floor(Date.now() / 1000);
+      // Arredondamos para a hora cheia: assim a URL fica idêntica durante
+      // toda a hora, e o cache do Next.js reaproveita a mesma busca em vez
+      // de gastar uma chamada nova da API a cada visita (o plano gratuito
+      // da gold-api.com só permite 10 chamadas por hora).
+      const now = Math.floor(Date.now() / 1000 / 3600) * 3600;
       const twoDaysAgo = now - 2 * 24 * 60 * 60;
       try {
         const histRes = await fetch(
           `https://api.gold-api.com/history?symbol=${symbol}&startTimestamp=${twoDaysAgo}&endTimestamp=${now}&groupBy=day&aggregation=avg&orderBy=asc`,
-          { headers: { 'x-api-key': process.env.GOLD_API_KEY }, next: { revalidate: 300 } }
+          { headers: { 'x-api-key': process.env.GOLD_API_KEY }, next: { revalidate: 3600 } }
         );
         if (histRes.ok) {
           const hist = await histRes.json();
@@ -212,7 +216,9 @@ export async function fetchHistory(slug: string, days: number): Promise<PricePoi
   }
 
   const symbol = METAL_SYMBOLS[slug];
-  const now = Math.floor(Date.now() / 1000);
+  // Mesmo motivo de cima: arredondar pra hora cheia permite reaproveitar
+  // o cache em vez de gastar uma chamada nova a cada visitante.
+  const now = Math.floor(Date.now() / 1000 / 3600) * 3600;
   const start = now - days * 24 * 60 * 60;
 
   try {
