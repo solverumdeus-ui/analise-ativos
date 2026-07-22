@@ -72,7 +72,7 @@ async function fetchAllCryptoPrices(): Promise<Record<string, LivePrice>> {
 
   const res = await fetchWithRetry(
     `https://api.coingecko.com/api/v3/simple/price?ids=${ids}&vs_currencies=usd&include_24hr_change=true`,
-    { next: { revalidate: 60 } }
+    { cache: 'force-cache', next: { revalidate: 60 } }
   );
 
   if (res && res.ok) {
@@ -99,6 +99,7 @@ async function fetchMetalPrice(slug: string): Promise<LivePrice | null> {
   const symbol = METAL_SYMBOLS[slug];
   try {
     const res = await fetch(`https://api.gold-api.com/price/${symbol}`, {
+      cache: 'force-cache',
       next: { revalidate: 60 },
     });
     if (!res.ok) return null;
@@ -117,7 +118,7 @@ async function fetchMetalPrice(slug: string): Promise<LivePrice | null> {
       try {
         const histRes = await fetch(
           `https://api.gold-api.com/history?symbol=${symbol}&startTimestamp=${twoDaysAgo}&endTimestamp=${now}&groupBy=day&aggregation=avg&orderBy=asc`,
-          { headers: { 'x-api-key': process.env.GOLD_API_KEY }, next: { revalidate: 3600 } }
+          { headers: { 'x-api-key': process.env.GOLD_API_KEY }, cache: 'force-cache', next: { revalidate: 3600 } }
         );
         if (histRes.ok) {
           const hist = await histRes.json();
@@ -142,8 +143,6 @@ export async function fetchLivePrice(slug: string): Promise<LivePrice | null> {
   return isCrypto(slug) ? fetchCryptoPrice(slug) : fetchMetalPrice(slug);
 }
 
-// --- histórico (para o replay) ---
-
 // --- candles (OHLC) para o replay com gráfico de velas ---
 
 export async function fetchCandles(slug: string, days: number): Promise<Candle[] | null> {
@@ -151,7 +150,7 @@ export async function fetchCandles(slug: string, days: number): Promise<Candle[]
     const id = COINGECKO_IDS[slug];
     const res = await fetchWithRetry(
       `https://api.coingecko.com/api/v3/coins/${id}/ohlc?vs_currency=usd&days=${days}`,
-      { next: { revalidate: 3600 } }
+      { cache: 'force-cache', next: { revalidate: 3600 } }
     );
     if (!res || !res.ok) {
       console.error(`[fetchCandles] CoinGecko OHLC falhou para ${id}: status ${res?.status ?? 'sem resposta'}`);
@@ -199,7 +198,7 @@ export async function fetchHistory(slug: string, days: number): Promise<PricePoi
     const id = COINGECKO_IDS[slug];
     const res = await fetchWithRetry(
       `https://api.coingecko.com/api/v3/coins/${id}/market_chart?vs_currency=usd&days=${days}&interval=daily`,
-      { next: { revalidate: 3600 } }
+      { cache: 'force-cache', next: { revalidate: 3600 } }
     );
     if (!res || !res.ok) return null;
     const data = await res.json();
@@ -224,7 +223,7 @@ export async function fetchHistory(slug: string, days: number): Promise<PricePoi
   try {
     const res = await fetch(
       `https://api.gold-api.com/history?symbol=${symbol}&startTimestamp=${start}&endTimestamp=${now}&groupBy=day&aggregation=avg&orderBy=asc`,
-      { headers: { 'x-api-key': process.env.GOLD_API_KEY }, next: { revalidate: 3600 } }
+      { headers: { 'x-api-key': process.env.GOLD_API_KEY }, cache: 'force-cache', next: { revalidate: 3600 } }
     );
     if (!res.ok) {
       const body = await res.text();
