@@ -4,19 +4,41 @@ import AnalysisEditor from '@/components/AnalysisEditor';
 
 export const dynamic = 'force-dynamic';
 
-export default async function Analises() {
+const ASSET_BLOCKS = [
+  { symbol: 'BTC', label: 'Bitcoin (BTC)' },
+  { symbol: 'XAU', label: 'Ouro (XAU)' },
+  { symbol: 'XAG', label: 'Prata (XAG)' },
+  { symbol: 'XRP', label: 'XRP' },
+];
+
+export default async function Episodios() {
   const posts = await getAllPosts();
 
   return (
     <div style={{ padding: '28px 0' }}>
       <AnalysisEditor />
 
-      <p className="section-label">todas as análises</p>
-      <div className="post-list">
-        {posts.map((p) => (
-          <PostCard key={p.slug} post={p} />
-        ))}
-      </div>
+      {ASSET_BLOCKS.map((block) => {
+        const postsForAsset = posts.filter((p) => p.asset === block.symbol);
+        if (postsForAsset.length === 0) return null;
+
+        return (
+          <div key={block.symbol} style={{ marginBottom: 40 }}>
+            <p className="section-label">{block.label}</p>
+            <div className="post-list">
+              {postsForAsset.map((p) => (
+                <PostCard key={p.slug} post={p} />
+              ))}
+            </div>
+          </div>
+        );
+      })}
+
+      {posts.length === 0 && (
+        <p style={{ color: 'var(--text-secondary)', fontSize: 14 }}>
+          Nenhuma análise publicada ainda.
+        </p>
+      )}
     </div>
   );
 }
