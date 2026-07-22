@@ -145,6 +145,90 @@ export async function fetchLivePrice(slug: string): Promise<LivePrice | null> {
 
 // --- candles (OHLC) para o replay com gráfico de velas ---
 
+// Busca uma série diária de um único tipo de agregação (max, min ou avg)
+// para um metal. Usada para montar candles com máxima/mínima REAIS do dia,
+// em vez de aproximar a partir de open/close.
+async function fetchMetalDailySeries(
+  symbol: string,
+  startTimestamp: number,
+  endTimestamp: number,
+  aggregation: 'max' | 'min' | 'avg'
+): Promise<Record<string, number> | null> {
+  if (!process.env.GOLD_API_KEY) return null;
+
+  try {
+    const res = await fetch(
+      `https://api.gold-api.com/history?symbol=${symbol}&startTimestamp=${startTimestamp}&endTimestamp=${endTimestamp}&groupBy=day&aggregation=${aggregation}&orderBy=asc`,
+      { headers: { 'x-api-key': process.env.GOLD_API_KEY }, cache: 'force-cache', next: { revalidate: 3600 } }
+    );
+    if (!res.ok) {
+      const body = await res.text();
+      console.error(`[fetchMetalDailySeries] gold-api falhou (${aggregation}) para ${symbol}: status ${res.status} — ${body.slice(0, 300)}`);
+      return null;
+    }
+    const data = await res.json();
+    if (!Array.isArray(data)) {
+      console.error(`[fetchMetalDailySeries] formato inesperado (${aggregation}) para ${symbol}:`, JSON.stringify(data).slice(0, 300));
+      return null;
+    }
+    const field = `${aggregation}_price`;
+    const map: Record<string, number> = {};
+    for (const d of data as Record<string, number | string>[]) {
+      const day = d.day as string;
+      map[day] = d[field] as number;
+    }
+    return map;
+  } catch (err) {
+    console.error(`[fetchMetalDailySeries] erro de rede (${aggregation}) para ${symbol}:`, err);
+    return null;
+  }
+}
+
+// Monta candles diários reais para metais, usando a máxima e a mínima
+// REAIS de cada dia (não uma aproximação via open/close). É isso que
+// garante que, se o alvo projetado numa análise foi tocado durante o
+// dia, o replay mostra corretamente que ele foi atingido.
+async function fetchMetalCandles(slug: string, days: number): Promise<Candle[] | null> {
+  const symbol = METAL_SYMBOLS[slug];
+  if (!process.env.GOLD_API_KEY) {
+    console.error('[fetchMetalCandles] GOLD_API_KEY não configurada.');
+    return null;
+  }
+
+  // Mesmo motivo de sempre: arredondar pra hora cheia permite reaproveitar
+  // o cache em vez de gastar uma chamada nova a cada visitante.
+  const now = Math.floor(Date.now() / 1000 / 3600) * 3600;
+  const start = now - days * 24 * 60 * 60;
+
+  const [maxMap, minMap, avgMap] = await Promise.all([
+    fetchMetalDailySeries(symbol, start, now, 'max'),
+    fetchMetalDailySeries(symbol, start, now, 'min'),
+    fetchMetalDailySeries(symbol, start, now, 'avg'),
+  ]);
+
+  if (!maxMap || !minMap || !avgMap) return null;
+
+  const days_sorted = Object.keys(avgMap).sort();
+  if (days_sorted.length < 2) return null;
+
+  const candles: Candle[] = [];
+  for (let i = 1; i < days_sorted.length; i++) {
+    const day = days_sorted[i];
+    const prevDay = days_sorted[i - 1];
+    if (maxMap[day] === undefined || minMap[day] === undefined) continue;
+
+    const open = avgMap[prevDay];
+    const close = avgMap[day];
+    // A máxima/mínima real do dia pode ser mais extrema que open/close —
+    // um candle correto sempre engloba os dois.
+    const high = Math.max(maxMap[day], open, close);
+    const low = Math.min(minMap[day], open, close);
+
+    candles.push({ date: day, open, close, high, low });
+  }
+  return candles;
+}
+
 export async function fetchCandles(slug: string, days: number): Promise<Candle[] | null> {
   if (isCrypto(slug)) {
     const id = COINGECKO_IDS[slug];
@@ -170,27 +254,12 @@ export async function fetchCandles(slug: string, days: number): Promise<Candle[]
     }));
   }
 
-  // Metais: a API gratuita não oferece OHLC intradiário por dia,
-  // então montamos "candles" a partir da média diária (open = média
-  // do dia anterior, close = média do dia). É uma aproximação, não
-  // um candle real intradiário — mas mantém a lógica de "atingiu o
-  // nível" funcionando corretamente.
-  const history = await fetchHistory(slug, days);
-  if (!history || history.length < 2) return null;
-
-  const candles: Candle[] = [];
-  for (let i = 1; i < history.length; i++) {
-    const open = history[i - 1].price;
-    const close = history[i].price;
-    candles.push({
-      date: history[i].date,
-      open,
-      close,
-      high: Math.max(open, close),
-      low: Math.min(open, close),
-    });
-  }
-  return candles;
+  // Metais: agora usamos máxima e mínima REAIS de cada dia (via
+  // aggregation=max / aggregation=min da gold-api.com), em vez de
+  // aproximar high/low a partir de open/close. Isso corrige o replay
+  // não detectar níveis que foram tocados durante o dia mas não
+  // apareciam na média diária.
+  return fetchMetalCandles(slug, days);
 }
 
 export async function fetchHistory(slug: string, days: number): Promise<PricePoint[] | null> {
