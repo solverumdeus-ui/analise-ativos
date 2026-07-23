@@ -161,3 +161,43 @@ export async function createComment(input: {
   const r = rows[0];
   return { id: r.id, postSlug: r.post_slug, name: r.name, message: r.message, createdAt: r.created_at };
 }
+
+// --- cache de histórico de metais (gold-api.com) ---
+// A gold-api.com no plano gratuito só permite 10 chamadas por hora.
+// Guardamos o resultado de cada busca (por símbolo + tipo de agregação)
+// no banco, com hora da última atualização, pra nunca precisar chamar
+// a API de novo enquanto o dado ainda estiver "fresco" (menos de 1h) —
+// isso funciona de forma confiável entre diferentes visitantes e
+// diferentes instâncias serverless da Vercel, ao contrário do cache de
+// memória, que não é compartilhado entre elas.
+
+export type MetalHistoryCacheEntry = {
+  data: Record<string, number>;
+  updatedAt: string;
+};
+
+export async function getMetalHistoryCache(
+  symbol: string,
+  aggregation: string
+): Promise<MetalHistoryCacheEntry | null> {
+  const rows = await getSql()`
+    SELECT data, updated_at FROM metal_history_cache
+    WHERE symbol = ${symbol} AND aggregation = ${aggregation}
+    LIMIT 1
+  `;
+  if (rows.length === 0) return null;
+  return { data: rows[0].data, updatedAt: rows[0].updated_at };
+}
+
+export async function setMetalHistoryCache(
+  symbol: string,
+  aggregation: string,
+  data: Record<string, number>
+): Promise<void> {
+  await getSql()`
+    INSERT INTO metal_history_cache (symbol, aggregation, data, updated_at)
+    VALUES (${symbol}, ${aggregation}, ${JSON.stringify(data)}, NOW())
+    ON CONFLICT (symbol, aggregation)
+    DO UPDATE SET data = EXCLUDED.data, updated_at = NOW()
+  `;
+}
