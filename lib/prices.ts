@@ -145,6 +145,15 @@ export async function fetchLivePrice(slug: string): Promise<LivePrice | null> {
 
 // --- candles (OHLC) para o replay com gráfico de velas ---
 
+// Início fixo e amplo da janela de histórico dos metais. Importante: NÃO
+// depende do "days" pedido por cada análise. Se dependesse, cada análise
+// geraria uma URL diferente pra gold-api.com, e cada URL diferente conta
+// como uma chamada nova pro limite de 10/hora — estourando o limite com
+// poucas análises. Com um início fixo, a URL fica idêntica pra qualquer
+// análise/página, e o cache do Next.js reaproveita os mesmos 3 pedidos
+// (max/min/avg) pra todo o site, o tempo todo.
+const METAL_HISTORY_FIXED_START = Math.floor(new Date('2024-01-01T00:00:00Z').getTime() / 1000);
+
 // Busca uma série diária de um único tipo de agregação (max, min ou avg)
 // para um metal. Usada para montar candles com máxima/mínima REAIS do dia,
 // em vez de aproximar a partir de open/close.
@@ -195,10 +204,11 @@ async function fetchMetalCandles(slug: string, days: number): Promise<Candle[] |
     return null;
   }
 
-  // Mesmo motivo de sempre: arredondar pra hora cheia permite reaproveitar
-  // o cache em vez de gastar uma chamada nova a cada visitante.
+  // Janela FIXA (não depende de "days") — veja o comentário em
+  // METAL_HISTORY_FIXED_START. "now" ainda é arredondado pra hora cheia
+  // pra manter a URL estável dentro da mesma hora.
   const now = Math.floor(Date.now() / 1000 / 3600) * 3600;
-  const start = now - days * 24 * 60 * 60;
+  const start = METAL_HISTORY_FIXED_START;
 
   const [maxMap, minMap, avgMap] = await Promise.all([
     fetchMetalDailySeries(symbol, start, now, 'max'),
@@ -208,13 +218,19 @@ async function fetchMetalCandles(slug: string, days: number): Promise<Candle[] |
 
   if (!maxMap || !minMap || !avgMap) return null;
 
-  const days_sorted = Object.keys(avgMap).sort();
-  if (days_sorted.length < 2) return null;
+  const allDaysSorted = Object.keys(avgMap).sort();
+  if (allDaysSorted.length < 2) return null;
+
+  // Recorte LOCAL (sem chamada nova à API): fica só com os últimos
+  // "days" dias, que é o período que essa análise específica pediu.
+  const cutoff = new Date((now - days * 24 * 60 * 60) * 1000).toISOString().slice(0, 10);
+  const daysSorted = allDaysSorted.filter((d) => d >= cutoff);
+  if (daysSorted.length < 2) return null;
 
   const candles: Candle[] = [];
-  for (let i = 1; i < days_sorted.length; i++) {
-    const day = days_sorted[i];
-    const prevDay = days_sorted[i - 1];
+  for (let i = 1; i < daysSorted.length; i++) {
+    const day = daysSorted[i];
+    const prevDay = daysSorted[i - 1];
     if (maxMap[day] === undefined || minMap[day] === undefined) continue;
 
     const open = avgMap[prevDay];
