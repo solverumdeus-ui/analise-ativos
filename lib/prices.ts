@@ -139,76 +139,121 @@ export async function fetchLivePrice(slug: string): Promise<LivePrice | null> {
 
 // --- candles (OHLC) para o replay com gráfico de velas ---
 
+// Quanto tempo um dado guardado no banco ainda é considerado "fresco"
+// o bastante pra não precisar buscar de novo na gold-api.com.
+const METAL_CACHE_TTL_MS = 60 * 60 * 1000; // 1 hora
+
+// Cadeado global: garante que o site só TENTA buscar dado novo na
+// gold-api.com no máximo 1 vez a cada 65 minutos, não importa quantas
+// pessoas visitem o site nesse meio tempo. Sem isso, cada visita
+// simultânea disparava sua própria tentativa e todas tomavam 429 juntas,
+// nunca dando tempo da cota (10/hora) resetar de forma útil. Usamos uma
+// linha especial na mesma tabela de cache só pra guardar o horário da
+// última tentativa.
+const METAL_LOCK_SYMBOL = '_lock';
+const METAL_LOCK_AGG = 'global';
+const METAL_LOCK_COOLDOWN_MS = 65 * 60 * 1000; // um pouco mais que o TTL, de folga
+
+async function tryAcquireMetalRefreshLock(): Promise<boolean> {
+  const { getMetalHistoryCache, setMetalHistoryCache } = await import('./db');
+  let lock: { data: Record<string, number>; updatedAt: string } | null = null;
+  try {
+    lock = await getMetalHistoryCache(METAL_LOCK_SYMBOL, METAL_LOCK_AGG);
+  } catch (err) {
+    console.error('[tryAcquireMetalRefreshLock] erro ao ler cadeado:', err);
+    return false; // se não conseguimos nem ler o banco, não arrisca chamar a API
+  }
+  const isRecent = lock && Date.now() - new Date(lock.updatedAt).getTime() < METAL_LOCK_COOLDOWN_MS;
+  if (isRecent) return false;
+
+  // Marca a tentativa JÁ, antes de chamar a API, pra que outras
+  // requisições concorrentes vejam o cadeado ocupado imediatamente.
+  try {
+    await setMetalHistoryCache(METAL_LOCK_SYMBOL, METAL_LOCK_AGG, {});
+  } catch (err) {
+    console.error('[tryAcquireMetalRefreshLock] erro ao marcar cadeado:', err);
+    return false;
+  }
+  return true;
+}
+
+// Garante que o cache de todos os metais (XAU e XAG, max/min/avg) está
+// atualizado, respeitando o cadeado acima. Chamado no início de qualquer
+// operação que precise de dado de metal — é seguro chamar várias vezes,
+// só vai realmente bater na API quando o cadeado permitir.
+let metalCacheRefreshPromise: Promise<void> | null = null;
+
+async function ensureMetalCacheFresh(): Promise<void> {
+  // Evita que, dentro da mesma execução (mesma requisição), duas partes
+  // do código tentem atualizar ao mesmo tempo — reaproveita a mesma
+  // promise em andamento.
+  if (metalCacheRefreshPromise) return metalCacheRefreshPromise;
+
+  metalCacheRefreshPromise = (async () => {
+    const allowed = await tryAcquireMetalRefreshLock();
+    if (!allowed) return;
+
+    const { setMetalHistoryCache } = await import('./db');
+    const now = Math.floor(Date.now() / 1000 / 3600) * 3600;
+
+    for (const symbol of Object.values(METAL_SYMBOLS)) {
+      for (const aggregation of ['max', 'min', 'avg'] as const) {
+        try {
+          const res = await fetch(
+            `https://api.gold-api.com/history?symbol=${symbol}&startTimestamp=${METAL_HISTORY_FIXED_START}&endTimestamp=${now}&groupBy=day&aggregation=${aggregation}&orderBy=asc`,
+            { headers: { 'x-api-key': process.env.GOLD_API_KEY ?? '' }, cache: 'no-store' }
+          );
+          if (!res.ok) {
+            const body = await res.text();
+            console.error(`[ensureMetalCacheFresh] gold-api falhou (${aggregation}) para ${symbol}: status ${res.status} — ${body.slice(0, 300)}`);
+            continue;
+          }
+          const data = await res.json();
+          if (!Array.isArray(data)) {
+            console.error(`[ensureMetalCacheFresh] formato inesperado (${aggregation}) para ${symbol}:`, JSON.stringify(data).slice(0, 300));
+            continue;
+          }
+          const field = `${aggregation}_price`;
+          const map: Record<string, number> = {};
+          for (const d of data as Record<string, number | string>[]) {
+            map[d.day as string] = d[field] as number;
+          }
+          await setMetalHistoryCache(symbol, aggregation, map);
+        } catch (err) {
+          console.error(`[ensureMetalCacheFresh] erro (${aggregation}) para ${symbol}:`, err);
+        }
+      }
+    }
+  })();
+
+  try {
+    await metalCacheRefreshPromise;
+  } finally {
+    metalCacheRefreshPromise = null;
+  }
+}
+
 // Início fixo e amplo da janela de histórico dos metais, usado só quando
 // é preciso buscar dado novo na gold-api.com (não depende do "days"
 // pedido por cada análise, pra sempre pedir a mesma janela ampla).
 const METAL_HISTORY_FIXED_START = Math.floor(new Date('2024-01-01T00:00:00Z').getTime() / 1000);
 
-// Quanto tempo um dado guardado no banco ainda é considerado "fresco"
-// o bastante pra não precisar buscar de novo na gold-api.com.
-const METAL_CACHE_TTL_MS = 60 * 60 * 1000; // 1 hora
-
-// Busca uma série diária de um único tipo de agregação (max, min ou avg)
-// para um metal. Usa um cache no Postgres (tabela metal_history_cache)
-// como fonte principal: só chama a gold-api.com de fato quando o dado
-// salvo tem mais de 1 hora. Isso é o que garante que o limite de 10
-// chamadas/hora da API nunca estoura, mesmo com muitas análises e
-// visitantes diferentes — o cache de `fetch` do Next.js sozinho não
-// segurava isso de forma confiável em produção na Vercel.
+// Lê a série diária de um único tipo de agregação (max, min ou avg) para
+// um metal, SEMPRE a partir do cache no banco — nunca chama a gold-api.com
+// diretamente aqui (isso é responsabilidade só de ensureMetalCacheFresh,
+// que respeita o cadeado global).
 async function fetchMetalDailySeries(
   symbol: string,
   aggregation: 'max' | 'min' | 'avg'
 ): Promise<Record<string, number> | null> {
-  const { getMetalHistoryCache, setMetalHistoryCache } = await import('./db');
-
-  let cached: { data: Record<string, number>; updatedAt: string } | null = null;
+  await ensureMetalCacheFresh();
+  const { getMetalHistoryCache } = await import('./db');
   try {
-    cached = await getMetalHistoryCache(symbol, aggregation);
+    const cached = await getMetalHistoryCache(symbol, aggregation);
+    return cached?.data ?? null;
   } catch (err) {
     console.error(`[fetchMetalDailySeries] erro ao ler cache do banco (${aggregation}) para ${symbol}:`, err);
-  }
-
-  const isFresh = cached && Date.now() - new Date(cached.updatedAt).getTime() < METAL_CACHE_TTL_MS;
-  if (isFresh) return cached!.data;
-
-  if (!process.env.GOLD_API_KEY) return cached?.data ?? null;
-
-  const now = Math.floor(Date.now() / 1000 / 3600) * 3600;
-
-  try {
-    const res = await fetch(
-      `https://api.gold-api.com/history?symbol=${symbol}&startTimestamp=${METAL_HISTORY_FIXED_START}&endTimestamp=${now}&groupBy=day&aggregation=${aggregation}&orderBy=asc`,
-      { headers: { 'x-api-key': process.env.GOLD_API_KEY }, cache: 'no-store' }
-    );
-    if (!res.ok) {
-      const body = await res.text();
-      console.error(`[fetchMetalDailySeries] gold-api falhou (${aggregation}) para ${symbol}: status ${res.status} — ${body.slice(0, 300)}`);
-      // Se a chamada falhar (ex: rate limit) mas já tivermos um dado
-      // salvo, mesmo que velho, é melhor usar esse do que nada.
-      return cached?.data ?? null;
-    }
-    const data = await res.json();
-    if (!Array.isArray(data)) {
-      console.error(`[fetchMetalDailySeries] formato inesperado (${aggregation}) para ${symbol}:`, JSON.stringify(data).slice(0, 300));
-      return cached?.data ?? null;
-    }
-    const field = `${aggregation}_price`;
-    const map: Record<string, number> = {};
-    for (const d of data as Record<string, number | string>[]) {
-      const day = d.day as string;
-      map[day] = d[field] as number;
-    }
-
-    try {
-      await setMetalHistoryCache(symbol, aggregation, map);
-    } catch (err) {
-      console.error(`[fetchMetalDailySeries] erro ao salvar cache do banco (${aggregation}) para ${symbol}:`, err);
-    }
-
-    return map;
-  } catch (err) {
-    console.error(`[fetchMetalDailySeries] erro de rede (${aggregation}) para ${symbol}:`, err);
-    return cached?.data ?? null;
+    return null;
   }
 }
 
