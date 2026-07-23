@@ -105,26 +105,20 @@ async function fetchMetalPrice(slug: string): Promise<LivePrice | null> {
     if (!res.ok) return null;
     const data = await res.json();
 
-    // A variação de 24h para metais exige o endpoint de histórico (com chave).
-    // Sem chave configurada, mostramos 0 (sem variação) em vez de quebrar o site.
+    // A variação de 24h reaproveita o mesmo cache de "avg" usado nos
+    // candles (fetchMetalDailySeries), em vez de fazer uma chamada
+    // separada à gold-api — assim não soma mais uma URL ao limite de
+    // 10 requisições/hora. Sem chave configurada, mostra 0 (sem
+    // variação) em vez de quebrar o site.
     let change = 0;
     if (process.env.GOLD_API_KEY) {
-      // Arredondamos para a hora cheia: assim a URL fica idêntica durante
-      // toda a hora, e o cache do Next.js reaproveita a mesma busca em vez
-      // de gastar uma chamada nova da API a cada visita (o plano gratuito
-      // da gold-api.com só permite 10 chamadas por hora).
-      const now = Math.floor(Date.now() / 1000 / 3600) * 3600;
-      const twoDaysAgo = now - 2 * 24 * 60 * 60;
       try {
-        const histRes = await fetch(
-          `https://api.gold-api.com/history?symbol=${symbol}&startTimestamp=${twoDaysAgo}&endTimestamp=${now}&groupBy=day&aggregation=avg&orderBy=asc`,
-          { headers: { 'x-api-key': process.env.GOLD_API_KEY }, cache: 'force-cache', next: { revalidate: 3600 } }
-        );
-        if (histRes.ok) {
-          const hist = await histRes.json();
-          if (hist.length >= 2) {
-            const first = hist[hist.length - 2].avg_price;
-            const last = hist[hist.length - 1].avg_price;
+        const avgMap = await fetchMetalDailySeries(symbol, 'avg');
+        if (avgMap) {
+          const daysSorted = Object.keys(avgMap).sort();
+          if (daysSorted.length >= 2) {
+            const first = avgMap[daysSorted[daysSorted.length - 2]];
+            const last = avgMap[daysSorted[daysSorted.length - 1]];
             change = ((last - first) / first) * 100;
           }
         }
@@ -145,40 +139,58 @@ export async function fetchLivePrice(slug: string): Promise<LivePrice | null> {
 
 // --- candles (OHLC) para o replay com gráfico de velas ---
 
-// Início fixo e amplo da janela de histórico dos metais. Importante: NÃO
-// depende do "days" pedido por cada análise. Se dependesse, cada análise
-// geraria uma URL diferente pra gold-api.com, e cada URL diferente conta
-// como uma chamada nova pro limite de 10/hora — estourando o limite com
-// poucas análises. Com um início fixo, a URL fica idêntica pra qualquer
-// análise/página, e o cache do Next.js reaproveita os mesmos 3 pedidos
-// (max/min/avg) pra todo o site, o tempo todo.
+// Início fixo e amplo da janela de histórico dos metais, usado só quando
+// é preciso buscar dado novo na gold-api.com (não depende do "days"
+// pedido por cada análise, pra sempre pedir a mesma janela ampla).
 const METAL_HISTORY_FIXED_START = Math.floor(new Date('2024-01-01T00:00:00Z').getTime() / 1000);
 
+// Quanto tempo um dado guardado no banco ainda é considerado "fresco"
+// o bastante pra não precisar buscar de novo na gold-api.com.
+const METAL_CACHE_TTL_MS = 60 * 60 * 1000; // 1 hora
+
 // Busca uma série diária de um único tipo de agregação (max, min ou avg)
-// para um metal. Usada para montar candles com máxima/mínima REAIS do dia,
-// em vez de aproximar a partir de open/close.
+// para um metal. Usa um cache no Postgres (tabela metal_history_cache)
+// como fonte principal: só chama a gold-api.com de fato quando o dado
+// salvo tem mais de 1 hora. Isso é o que garante que o limite de 10
+// chamadas/hora da API nunca estoura, mesmo com muitas análises e
+// visitantes diferentes — o cache de `fetch` do Next.js sozinho não
+// segurava isso de forma confiável em produção na Vercel.
 async function fetchMetalDailySeries(
   symbol: string,
-  startTimestamp: number,
-  endTimestamp: number,
   aggregation: 'max' | 'min' | 'avg'
 ): Promise<Record<string, number> | null> {
-  if (!process.env.GOLD_API_KEY) return null;
+  const { getMetalHistoryCache, setMetalHistoryCache } = await import('./db');
+
+  let cached: { data: Record<string, number>; updatedAt: string } | null = null;
+  try {
+    cached = await getMetalHistoryCache(symbol, aggregation);
+  } catch (err) {
+    console.error(`[fetchMetalDailySeries] erro ao ler cache do banco (${aggregation}) para ${symbol}:`, err);
+  }
+
+  const isFresh = cached && Date.now() - new Date(cached.updatedAt).getTime() < METAL_CACHE_TTL_MS;
+  if (isFresh) return cached!.data;
+
+  if (!process.env.GOLD_API_KEY) return cached?.data ?? null;
+
+  const now = Math.floor(Date.now() / 1000 / 3600) * 3600;
 
   try {
     const res = await fetch(
-      `https://api.gold-api.com/history?symbol=${symbol}&startTimestamp=${startTimestamp}&endTimestamp=${endTimestamp}&groupBy=day&aggregation=${aggregation}&orderBy=asc`,
-      { headers: { 'x-api-key': process.env.GOLD_API_KEY }, cache: 'force-cache', next: { revalidate: 3600 } }
+      `https://api.gold-api.com/history?symbol=${symbol}&startTimestamp=${METAL_HISTORY_FIXED_START}&endTimestamp=${now}&groupBy=day&aggregation=${aggregation}&orderBy=asc`,
+      { headers: { 'x-api-key': process.env.GOLD_API_KEY }, cache: 'no-store' }
     );
     if (!res.ok) {
       const body = await res.text();
       console.error(`[fetchMetalDailySeries] gold-api falhou (${aggregation}) para ${symbol}: status ${res.status} — ${body.slice(0, 300)}`);
-      return null;
+      // Se a chamada falhar (ex: rate limit) mas já tivermos um dado
+      // salvo, mesmo que velho, é melhor usar esse do que nada.
+      return cached?.data ?? null;
     }
     const data = await res.json();
     if (!Array.isArray(data)) {
       console.error(`[fetchMetalDailySeries] formato inesperado (${aggregation}) para ${symbol}:`, JSON.stringify(data).slice(0, 300));
-      return null;
+      return cached?.data ?? null;
     }
     const field = `${aggregation}_price`;
     const map: Record<string, number> = {};
@@ -186,10 +198,17 @@ async function fetchMetalDailySeries(
       const day = d.day as string;
       map[day] = d[field] as number;
     }
+
+    try {
+      await setMetalHistoryCache(symbol, aggregation, map);
+    } catch (err) {
+      console.error(`[fetchMetalDailySeries] erro ao salvar cache do banco (${aggregation}) para ${symbol}:`, err);
+    }
+
     return map;
   } catch (err) {
     console.error(`[fetchMetalDailySeries] erro de rede (${aggregation}) para ${symbol}:`, err);
-    return null;
+    return cached?.data ?? null;
   }
 }
 
@@ -204,16 +223,10 @@ async function fetchMetalCandles(slug: string, days: number): Promise<Candle[] |
     return null;
   }
 
-  // Janela FIXA (não depende de "days") — veja o comentário em
-  // METAL_HISTORY_FIXED_START. "now" ainda é arredondado pra hora cheia
-  // pra manter a URL estável dentro da mesma hora.
-  const now = Math.floor(Date.now() / 1000 / 3600) * 3600;
-  const start = METAL_HISTORY_FIXED_START;
-
   const [maxMap, minMap, avgMap] = await Promise.all([
-    fetchMetalDailySeries(symbol, start, now, 'max'),
-    fetchMetalDailySeries(symbol, start, now, 'min'),
-    fetchMetalDailySeries(symbol, start, now, 'avg'),
+    fetchMetalDailySeries(symbol, 'max'),
+    fetchMetalDailySeries(symbol, 'min'),
+    fetchMetalDailySeries(symbol, 'avg'),
   ]);
 
   if (!maxMap || !minMap || !avgMap) return null;
@@ -223,6 +236,7 @@ async function fetchMetalCandles(slug: string, days: number): Promise<Candle[] |
 
   // Recorte LOCAL (sem chamada nova à API): fica só com os últimos
   // "days" dias, que é o período que essa análise específica pediu.
+  const now = Math.floor(Date.now() / 1000 / 3600) * 3600;
   const cutoff = new Date((now - days * 24 * 60 * 60) * 1000).toISOString().slice(0, 10);
   const daysSorted = allDaysSorted.filter((d) => d >= cutoff);
   if (daysSorted.length < 2) return null;
