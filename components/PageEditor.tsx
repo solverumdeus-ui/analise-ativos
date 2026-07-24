@@ -1,0 +1,192 @@
+'use client';
+
+import { useState } from 'react';
+import { useRouter } from 'next/navigation';
+
+const inputStyle: React.CSSProperties = {
+  width: '100%',
+  padding: '10px 12px',
+  border: '1px solid var(--border)',
+  borderRadius: 6,
+  background: 'var(--bg)',
+  color: 'var(--text-primary)',
+  fontSize: 14,
+  boxSizing: 'border-box',
+};
+
+const labelStyle: React.CSSProperties = {
+  display: 'block',
+  fontSize: 13,
+  color: 'var(--text-secondary)',
+  marginBottom: 6,
+};
+
+type Props = {
+  slug: string;
+  currentTitle: string;
+  currentContent: string;
+  currentImageUrl?: string | null;
+};
+
+export default function PageEditor({ slug, currentTitle, currentContent, currentImageUrl }: Props) {
+  const router = useRouter();
+  const [isOpen, setIsOpen] = useState(false);
+  const [password, setPassword] = useState('');
+  const [title, setTitle] = useState(currentTitle);
+  const [content, setContent] = useState(currentContent);
+  const [imageUrl, setImageUrl] = useState(currentImageUrl ?? '');
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setIsLoading(true);
+    setError('');
+
+    try {
+      const res = await fetch(`/api/pages/${slug}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password, title, content, imageUrl: imageUrl || undefined }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setError(data.error || 'Erro ao salvar.');
+        return;
+      }
+
+      setIsOpen(false);
+      router.refresh();
+    } catch {
+      setError('Erro de conexão. Tente novamente.');
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
+  if (!isOpen) {
+    return (
+      <button
+        onClick={() => setIsOpen(true)}
+        style={{
+          padding: '8px 16px',
+          background: 'var(--surface)',
+          color: 'var(--text-primary)',
+          border: '1px solid var(--border-strong)',
+          borderRadius: 8,
+          cursor: 'pointer',
+          fontSize: 13,
+          fontWeight: 600,
+        }}
+      >
+        ✎ Editar página
+      </button>
+    );
+  }
+
+  return (
+    <div
+      style={{
+        background: 'var(--surface)',
+        border: '1px solid var(--border)',
+        borderRadius: 12,
+        padding: 24,
+        marginBottom: 32,
+      }}
+    >
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+        <h2 style={{ margin: 0, fontSize: 18, fontFamily: 'var(--font-display)' }}>Editar página</h2>
+        <button
+          onClick={() => setIsOpen(false)}
+          style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: 'var(--text-secondary)' }}
+          aria-label="Fechar"
+        >
+          ✕
+        </button>
+      </div>
+
+      <form onSubmit={handleSubmit}>
+        <div style={{ marginBottom: 16 }}>
+          <label style={labelStyle}>Senha de administrador</label>
+          <input
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+            style={inputStyle}
+          />
+        </div>
+
+        <div style={{ marginBottom: 16 }}>
+          <label style={labelStyle}>Título</label>
+          <input
+            type="text"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            required
+            style={inputStyle}
+          />
+        </div>
+
+        <div style={{ marginBottom: 16 }}>
+          <label style={labelStyle}>Conteúdo (aceita Markdown)</label>
+          <textarea
+            value={content}
+            onChange={(e) => setContent(e.target.value)}
+            required
+            style={{ ...inputStyle, minHeight: 360, fontFamily: 'inherit', resize: 'vertical' }}
+          />
+        </div>
+
+        <div style={{ marginBottom: 24 }}>
+          <label style={labelStyle}>Link de imagem (opcional)</label>
+          <input
+            type="url"
+            value={imageUrl}
+            onChange={(e) => setImageUrl(e.target.value)}
+            placeholder="https://..."
+            style={inputStyle}
+          />
+        </div>
+
+        {error && <p style={{ color: 'var(--down)', fontSize: 13, marginBottom: 16 }}>{error}</p>}
+
+        <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end' }}>
+          <button
+            type="button"
+            onClick={() => setIsOpen(false)}
+            style={{
+              padding: '10px 20px',
+              background: 'var(--border)',
+              color: 'var(--text-primary)',
+              border: 'none',
+              borderRadius: 6,
+              cursor: 'pointer',
+              fontSize: 14,
+            }}
+          >
+            Cancelar
+          </button>
+          <button
+            type="submit"
+            disabled={isLoading}
+            style={{
+              padding: '10px 20px',
+              background: isLoading ? 'var(--border)' : 'var(--accent)',
+              color: '#0b0e11',
+              border: 'none',
+              borderRadius: 6,
+              cursor: isLoading ? 'not-allowed' : 'pointer',
+              fontSize: 14,
+              fontWeight: 600,
+            }}
+          >
+            {isLoading ? 'Salvando...' : 'Salvar alterações'}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
