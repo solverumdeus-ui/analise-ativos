@@ -201,3 +201,51 @@ export async function setMetalHistoryCache(
     DO UPDATE SET data = EXCLUDED.data, updated_at = NOW()
   `;
 }
+// --- páginas fixas (Método, e futuramente Termos/Privacidade etc.) ---
+
+export type Page = {
+  slug: string;
+  title: string;
+  content: string;
+  imageUrl: string | null;
+  updatedAt: string;
+};
+
+function mapPage(row: any): Page {
+  return {
+    slug: row.slug,
+    title: row.title,
+    content: row.content,
+    imageUrl: row.image_url,
+    updatedAt: row.updated_at,
+  };
+}
+
+export async function getPage(slug: string): Promise<Page | null> {
+  const rows = await getSql()`SELECT * FROM pages WHERE slug = ${slug} LIMIT 1`;
+  if (rows.length === 0) return null;
+  return mapPage(rows[0]);
+}
+
+// Cria a página se ela ainda não existir, ou atualiza se já existir —
+// assim o mesmo formulário serve tanto pra primeira publicação quanto
+// pra edições depois.
+export async function upsertPage(input: {
+  slug: string;
+  title: string;
+  content: string;
+  imageUrl?: string | null;
+}): Promise<Page> {
+  const rows = await getSql()`
+    INSERT INTO pages (slug, title, content, image_url, updated_at)
+    VALUES (${input.slug}, ${input.title}, ${input.content}, ${input.imageUrl ?? null}, NOW())
+    ON CONFLICT (slug)
+    DO UPDATE SET
+      title = EXCLUDED.title,
+      content = EXCLUDED.content,
+      image_url = EXCLUDED.image_url,
+      updated_at = NOW()
+    RETURNING *
+  `;
+  return mapPage(rows[0]);
+}
