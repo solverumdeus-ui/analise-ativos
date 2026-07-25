@@ -1,4 +1,5 @@
 import { getAllPosts } from '@/lib/db';
+import { calcularResultado } from '@/lib/results';
 import PostCard from '@/components/PostCard';
 import AnalysisEditor from '@/components/AnalysisEditor';
 
@@ -14,6 +15,11 @@ const ASSET_BLOCKS = [
 export default async function Episodios() {
   const posts = await getAllPosts();
 
+  // calcula o resultado de todas as análises em paralelo, uma vez só,
+  // e guarda num mapa por slug pra consultar rápido ao renderizar
+  const resultadosList = await Promise.all(posts.map((p) => calcularResultado(p)));
+  const resultadosPorSlug = Object.fromEntries(posts.map((p, i) => [p.slug, resultadosList[i]]));
+
   return (
     <div style={{ padding: '28px 0' }}>
       <AnalysisEditor />
@@ -27,7 +33,7 @@ export default async function Episodios() {
             <p className="section-label">{block.label}</p>
             <div className="post-list">
               {postsForAsset.map((p) => (
-                <PostCard key={p.slug} post={p} />
+                <PostCard key={p.slug} post={p} resultado={resultadosPorSlug[p.slug]} />
               ))}
             </div>
           </div>
