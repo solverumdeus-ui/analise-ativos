@@ -1,5 +1,6 @@
 import { getAssets } from '@/lib/assets';
 import { getAllPosts } from '@/lib/db';
+import { calcularResultado } from '@/lib/results';
 import AssetCard from '@/components/AssetCard';
 import PostCard from '@/components/PostCard';
 
@@ -16,6 +17,10 @@ export default async function Home() {
     allPosts.find((p) => p.asset === assetSymbol)
   ).filter((p): p is NonNullable<typeof p> => p !== undefined);
 
+  // calcula o resultado (atingiu/não atingiu + percentual) de cada uma
+  // em paralelo, pra não esperar uma de cada vez
+  const resultados = await Promise.all(latestByAsset.map((p) => calcularResultado(p)));
+
   return (
     <>
       <div className="asset-grid">
@@ -26,8 +31,8 @@ export default async function Home() {
 
       <p className="section-label">análises recentes</p>
       <div className="post-list">
-        {latestByAsset.map((p) => (
-          <PostCard key={p.slug} post={p} />
+        {latestByAsset.map((p, i) => (
+          <PostCard key={p.slug} post={p} resultado={resultados[i]} />
         ))}
       </div>
     </>
