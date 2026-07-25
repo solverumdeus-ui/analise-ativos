@@ -6,11 +6,27 @@ export type ResultadoAnalise = {
   percentual: number | null;
 };
 
+// A API OHLC da CoinGecko só aceita esses valores específicos pro
+// parâmetro "days" — qualquer outro número dá erro 400. Precisamos
+// sempre arredondar pra cima, pro próximo valor válido da lista.
+const COINGECKO_ALLOWED_DAYS = [1, 7, 14, 30, 90, 180, 365];
+
+function roundUpToAllowedDays(days: number): number {
+  return COINGECKO_ALLOWED_DAYS.find((d) => d >= days) ?? 365;
+}
+
+// Calcula automaticamente se uma análise bateu o alvo e o percentual de
+// variação entre o preço de entrada (capturado no momento da publicação)
+// e o nível-alvo — sem precisar de nada digitado manualmente. Reaproveita
+// a mesma lógica de comparação já usada no replay (ReplayChart).
 export async function calcularResultado(post: Post): Promise<ResultadoAnalise> {
   if (!post.nivelAlvo || !post.direcao || !post.precoEntrada) {
     return { status: 'indisponivel', percentual: null };
   }
 
+  // O percentual é sempre expresso como "ganho pretendido" positivo,
+  // independente da direção — condiz com o jeito que operações de baixa
+  // também são lidas como resultado positivo quando dão certo.
   const percentual =
     post.direcao === 'alta'
       ? ((post.nivelAlvo - post.precoEntrada) / post.precoEntrada) * 100
@@ -22,8 +38,9 @@ export async function calcularResultado(post: Post): Promise<ResultadoAnalise> {
     1,
     Math.ceil((Date.now() - createdAtDate.getTime()) / (24 * 60 * 60 * 1000)) + 1
   );
+  const requestDays = roundUpToAllowedDays(daysSinceCreated);
 
-  const candles = await fetchCandles(slug, daysSinceCreated);
+  const candles = await fetchCandles(slug, requestDays);
   if (!candles || candles.length === 0) {
     return { status: 'indisponivel', percentual };
   }
