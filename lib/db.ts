@@ -84,6 +84,7 @@ export async function createPost(input: {
   tag: string;
   nivelAlvo?: number;
   direcao?: 'alta' | 'baixa';
+  precoEntrada?: number;
   imageUrl?: string;
   videoUrl?: string;
 }): Promise<Post> {
@@ -91,10 +92,10 @@ export async function createPost(input: {
   const slug = `${base}-${Date.now().toString().slice(-5)}`;
 
   const rows = await getSql()`
-    INSERT INTO posts (slug, title, content, asset, tag, nivel_alvo, direcao, image_url, video_url)
+    INSERT INTO posts (slug, title, content, asset, tag, nivel_alvo, direcao, preco_entrada, image_url, video_url)
     VALUES (
       ${slug}, ${input.title}, ${input.content}, ${input.asset}, ${input.tag},
-      ${input.nivelAlvo ?? null}, ${input.direcao ?? null},
+      ${input.nivelAlvo ?? null}, ${input.direcao ?? null}, ${input.precoEntrada ?? null},
       ${input.imageUrl ?? null}, ${input.videoUrl ?? null}
     )
     RETURNING *
