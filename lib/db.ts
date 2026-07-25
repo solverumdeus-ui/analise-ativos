@@ -48,6 +48,7 @@ function mapPost(row: any): Post {
     tag: row.tag,
     nivelAlvo: row.nivel_alvo !== null ? Number(row.nivel_alvo) : null,
     direcao: row.direcao,
+    precoEntrada: row.preco_entrada !== null ? Number(row.preco_entrada) : null,
     imageUrl: row.image_url,
     videoUrl: row.video_url,
     author: row.author,
