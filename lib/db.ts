@@ -23,6 +23,7 @@ export type Post = {
   tag: string;
   nivelAlvo: number | null;
   direcao: 'alta' | 'baixa' | null;
+  precoEntrada: number | null;
   imageUrl: string | null;
   videoUrl: string | null;
   author: string;
