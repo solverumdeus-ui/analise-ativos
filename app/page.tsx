@@ -9,7 +9,7 @@ export const dynamic = 'force-dynamic';
 const ASSET_ORDER = ['BTC', 'XAU', 'XAG', 'XRP'];
 
 export default async function Home() {
-  const assets = await getAssets();
+  const { assets, updatedAt } = await getAssets();
   const allPosts = await getAllPosts(); // já vem ordenado do mais recente pro mais antigo
 
   // pega só a análise mais recente de cada ativo (no máximo 4, uma por ativo)
@@ -23,7 +23,11 @@ export default async function Home() {
 
   return (
     <>
-      <div className="asset-grid">
+      <div className="asset-table-wrap">
+        <p className="section-label" style={{ margin: 0 }}>mesa</p>
+        <span className="updated-at">cotações às {updatedAt}</span>
+      </div>
+      <div className="asset-table">
         {assets.map((a) => (
           <AssetCard key={a.slug} asset={a} />
         ))}
