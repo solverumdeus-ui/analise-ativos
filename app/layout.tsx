@@ -24,11 +24,11 @@ export default async function RootLayout({ children }: { children: React.ReactNo
               <Logo size={28} />
               <span>Tese de Mercado</span>
             </Link>
-            <nav>
-              <Link href="/">ativos</Link>
-              <Link href="/analises">episódios</Link>
-              <Link href="/metodo">método</Link>
-              <Link href="/sobre">sobre</Link>
+           <nav>
+              <Link href="/">mesa</Link>
+              <Link href="/analises">research</Link>
+              <Link href="/metodo">tese</Link>
+              <Link href="/sobre">desk</Link>
             </nav>
           </header>
         </div>
