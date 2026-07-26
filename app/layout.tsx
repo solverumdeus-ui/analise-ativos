@@ -3,17 +3,13 @@ import Link from 'next/link';
 import Ticker from '@/components/Ticker';
 import Logo from '@/components/Logo';
 import { getAssets } from '@/lib/assets';
-
 export const metadata = {
   title: 'Tese de Mercado — análises de BTC, XAU, XAG, XRP',
   description: 'Análises de mercado por Solverum: Bitcoin, ouro, prata e XRP.',
 };
-
 export const revalidate = 300; // atualiza os preços a cada 5 minutos
-
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
-  const assets = await getAssets();
-
+  const { assets } = await getAssets();
   return (
     <html lang="pt-BR">
       <body>
@@ -24,7 +20,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
               <Logo size={28} />
               <span>Tese de Mercado</span>
             </Link>
-           <nav>
+            <nav>
               <Link href="/">mesa</Link>
               <Link href="/analises">research</Link>
               <Link href="/metodo">tese</Link>
