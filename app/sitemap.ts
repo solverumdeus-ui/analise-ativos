@@ -1,12 +1,11 @@
 import type { MetadataRoute } from 'next';
-import { getAllPosts } from '@/lib/db';
+import { getAllPosts, getAllSessionPosts } from '@/lib/db';
 
-// Mesmo fallback do robots.ts — troque só a variável de ambiente
-// NEXT_PUBLIC_SITE_URL quando migrar de domínio.
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://analise-ativos.vercel.app';
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const posts = await getAllPosts();
+  const sessionPosts = await getAllSessionPosts();
 
   const staticPages: MetadataRoute.Sitemap = [
     {
@@ -20,6 +19,18 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       lastModified: new Date(),
       changeFrequency: 'daily',
       priority: 0.9,
+    },
+    {
+      url: `${SITE_URL}/metodo`,
+      lastModified: new Date(),
+      changeFrequency: 'monthly',
+      priority: 0.6,
+    },
+    {
+      url: `${SITE_URL}/sessoes`,
+      lastModified: new Date(),
+      changeFrequency: 'weekly',
+      priority: 0.7,
     },
     {
       url: `${SITE_URL}/sobre`,
@@ -36,5 +47,12 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     priority: 0.8,
   }));
 
-  return [...staticPages, ...postPages];
+  const sessionPages: MetadataRoute.Sitemap = sessionPosts.map((post) => ({
+    url: `${SITE_URL}/sessoes/${post.slug}`,
+    lastModified: new Date(post.createdAt),
+    changeFrequency: 'weekly',
+    priority: 0.6,
+  }));
+
+  return [...staticPages, ...postPages, ...sessionPages];
 }
