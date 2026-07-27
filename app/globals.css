@@ -377,12 +377,18 @@ footer {
   border: 1px solid var(--border);
   border-radius: 10px;
   overflow: hidden;
+  position: relative;
 }
- 
+
+.chart-container,
+.chart-container > div {
+  height: 100%;
+  width: 100%;
+}
+
 @media (max-width: 640px) {
   .chart-container {
     height: 60vh;
     min-height: 360px;
   }
 }
- 
