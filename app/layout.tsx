@@ -2,6 +2,7 @@ import './globals.css';
 import Link from 'next/link';
 import Ticker from '@/components/Ticker';
 import Logo from '@/components/Logo';
+import NavMenu from '@/components/NavMenu';
 import { getAssets } from '@/lib/assets';
 export const metadata = {
   title: 'Tese de Mercado — análises de BTC, XAU, XAG, XRP',
@@ -20,13 +21,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
               <Logo size={28} />
               <span>Tese de Mercado</span>
             </Link>
-            <nav>
-              <Link href="/">mesa</Link>
-              <Link href="/analises">research</Link>
-              <Link href="/metodo">tese</Link>
-              <Link href="/sessoes">sessões</Link>
-              <Link href="/sobre">desk</Link>
-            </nav>
+            <NavMenu />
           </header>
         </div>
         <main className="container">{children}</main>
