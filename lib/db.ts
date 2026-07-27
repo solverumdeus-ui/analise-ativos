@@ -252,3 +252,88 @@ export async function upsertPage(input: {
   `;
   return mapPage(rows[0]);
 }
+
+// --- Entre Sessões (artigos livres, separados das análises técnicas) ---
+
+export type SessionCategory = 'fora-do-grafico' | 'base';
+
+export type SessionPost = {
+  id: number;
+  slug: string;
+  title: string;
+  content: string;
+  category: SessionCategory;
+  imageUrl: string | null;
+  author: string;
+  createdAt: string;
+};
+
+function mapSessionPost(row: any): SessionPost {
+  return {
+    id: row.id,
+    slug: row.slug,
+    title: row.title,
+    content: row.content,
+    category: row.category,
+    imageUrl: row.image_url,
+    author: row.author,
+    createdAt: row.created_at,
+  };
+}
+
+export async function getAllSessionPosts(): Promise<SessionPost[]> {
+  const rows = await getSql()`SELECT * FROM session_posts ORDER BY created_at DESC`;
+  return rows.map(mapSessionPost);
+}
+
+export async function getSessionPostBySlug(slug: string): Promise<SessionPost | null> {
+  const rows = await getSql()`SELECT * FROM session_posts WHERE slug = ${slug} LIMIT 1`;
+  if (rows.length === 0) return null;
+  return mapSessionPost(rows[0]);
+}
+
+export async function createSessionPost(input: {
+  title: string;
+  content: string;
+  category: SessionCategory;
+  imageUrl?: string;
+}): Promise<SessionPost> {
+  const base = slugify(input.title);
+  const slug = `${base}-${Date.now().toString().slice(-5)}`;
+
+  const rows = await getSql()`
+    INSERT INTO session_posts (slug, title, content, category, image_url)
+    VALUES (${slug}, ${input.title}, ${input.content}, ${input.category}, ${input.imageUrl ?? null})
+    RETURNING *
+  `;
+  return mapSessionPost(rows[0]);
+}
+
+export async function updateSessionPost(
+  slug: string,
+  input: {
+    title?: string;
+    content?: string;
+    category?: SessionCategory;
+    imageUrl?: string | null;
+  }
+): Promise<SessionPost | null> {
+  const current = await getSessionPostBySlug(slug);
+  if (!current) return null;
+
+  const rows = await getSql()`
+    UPDATE session_posts SET
+      title = ${input.title ?? current.title},
+      content = ${input.content ?? current.content},
+      category = ${input.category ?? current.category},
+      image_url = ${input.imageUrl !== undefined ? input.imageUrl : current.imageUrl}
+    WHERE slug = ${slug}
+    RETURNING *
+  `;
+  return mapSessionPost(rows[0]);
+}
+
+export async function deleteSessionPost(slug: string): Promise<boolean> {
+  const rows = await getSql()`DELETE FROM session_posts WHERE slug = ${slug} RETURNING slug`;
+  return rows.length > 0;
+}
