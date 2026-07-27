@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { Asset } from '@/lib/assets';
 
 function Sparkline({ data, isUp }: { data: number[]; isUp: boolean }) {
@@ -36,7 +37,7 @@ export default function AssetCard({ asset }: { asset: Asset }) {
   const isUp = asset.change >= 0;
 
   return (
-    <div className="asset-row">
+    <Link href={`/grafico/${asset.slug}`} className="asset-row">
       <div className="asset-row-symbol">
         <span
           className={`market-dot ${asset.marketOpen ? 'open' : 'closed'}`}
@@ -51,6 +52,6 @@ export default function AssetCard({ asset }: { asset: Asset }) {
       <div className={`asset-row-change ${isUp ? 'up' : 'down'}`}>
         {isUp ? '▲' : '▼'} {Math.abs(asset.change)}%
       </div>
-    </div>
+    </Link>
   );
 }
