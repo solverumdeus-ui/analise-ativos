@@ -190,8 +190,13 @@ nav a:hover {
   background: var(--surface);
   font-family: var(--font-mono);
   font-size: 13px;
+  cursor: pointer;
+  transition: background 0.15s ease;
 }
 
+.asset-row:hover {
+  background: var(--surface-raised);
+}
 .asset-row-symbol {
   display: flex;
   align-items: center;
