@@ -43,6 +43,6 @@ export default function TradingViewChart({ symbol }: Props) {
   }, [symbol]);
 
   return (
-    <div className="tradingview-widget-container" ref={containerRef} style={{ height: 520, width: '100%' }} />
+    <div className="tradingview-widget-container chart-container" ref={containerRef} />
   );
 }
