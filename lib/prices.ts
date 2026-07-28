@@ -320,7 +320,7 @@ export async function fetchCandles(slug: string, days: number): Promise<Candle[]
       return null;
     }
     return (data as number[][]).map(([ts, open, high, low, close]) => ({
-      date: new Date(ts).toISOString().slice(0, 10),
+      date: new Date(ts).toISOString(),
       open,
       high,
       low,
