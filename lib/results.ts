@@ -75,7 +75,7 @@ export async function calcularResultado(post: Post): Promise<ResultadoAnalise> {
   // sendo contado como se tivesse acontecido depois).
   const afterCall = isCryptoAsset
     ? candles.filter((c) => new Date(c.date).getTime() >= createdAtDate.getTime())
-    : candles.filter((c) => c.date > createdAtDate.toISOString().slice(0, 10));
+    : candles.filter((c) => c.date.slice(0, 10) > createdAtDate.toISOString().slice(0, 10));
 
   const historyHit = afterCall.some((c) =>
     post.direcao === 'alta' ? c.high >= post.nivelAlvo! : c.low <= post.nivelAlvo!
