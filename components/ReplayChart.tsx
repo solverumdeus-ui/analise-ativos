@@ -99,11 +99,15 @@ export default function ReplayChart({ candles, calledDate, nivelAlvo, direcao }:
     // Candles de cripto vêm com timestamp completo (ex: "2026-07-28T14:32:00.000Z"),
     // candles de metais vêm só com a data (ex: "2026-07-28") — a diferença
     // de tamanho da string é como detectamos qual precisão está disponível.
-    const isPrecise = candles.length > 0 && candles[0].date.length > 10;
+    // Candles de cripto vêm em ISO completo (com "T", ex: "2026-07-28T14:32:00.000Z").
+    // Candles de metal vêm só com data — às vezes com uma hora "00:00:00"
+    // anexada pela própria gold-api, mas sem o "T" — por isso usamos a
+    // presença do "T" pra distinguir, não o tamanho da string.
+    const isPrecise = candles.length > 0 && candles[0].date.includes('T');
 
     const afterCall = isPrecise
       ? candles.filter((c) => new Date(c.date).getTime() >= new Date(calledDate).getTime())
-      : candles.filter((c) => c.date > calledDate.slice(0, 10));
+      : candles.filter((c) => c.date.slice(0, 10) > calledDate.slice(0, 10));
 
     const hit = afterCall.some((c) =>
       direcao === 'alta' ? c.high >= nivelAlvo : c.low <= nivelAlvo
