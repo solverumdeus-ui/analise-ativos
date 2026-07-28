@@ -95,7 +95,16 @@ export default function ReplayChart({ candles, calledDate, nivelAlvo, direcao }:
 
   function evaluateResult() {
     if (!nivelAlvo || !direcao) return;
-    const afterCall = candles.filter((c) => c.date >= calledDate);
+
+    // Candles de cripto vêm com timestamp completo (ex: "2026-07-28T14:32:00.000Z"),
+    // candles de metais vêm só com a data (ex: "2026-07-28") — a diferença
+    // de tamanho da string é como detectamos qual precisão está disponível.
+    const isPrecise = candles.length > 0 && candles[0].date.length > 10;
+
+    const afterCall = isPrecise
+      ? candles.filter((c) => new Date(c.date).getTime() >= new Date(calledDate).getTime())
+      : candles.filter((c) => c.date > calledDate.slice(0, 10));
+
     const hit = afterCall.some((c) =>
       direcao === 'alta' ? c.high >= nivelAlvo : c.low <= nivelAlvo
     );
