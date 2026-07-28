@@ -61,8 +61,22 @@ export async function calcularResultado(post: Post): Promise<ResultadoAnalise> {
     return { status: liveHit ? 'atingiu' : 'indisponivel', percentual };
   }
 
-  const calledDate = createdAtDate.toISOString().slice(0, 10);
-  const afterCall = candles.filter((c) => c.date >= calledDate);
+  const isCryptoAsset = slug === 'btc' || slug === 'xrp';
+
+  // Cripto tem candles de 4h de verdade — dá pra comparar pelo horário
+  // exato da publicação, sem ambiguidade.
+  //
+  // Metais só têm granularidade diária (o "candle" já representa o dia
+  // inteiro). Nesse caso, não dá pra saber se o toque no alvo foi antes
+  // ou depois da hora exata da publicação NO MESMO DIA — por segurança,
+  // excluímos o próprio dia da publicação da checagem, e só consideramos
+  // "atingido" a partir do dia seguinte. Isso evita falso positivo (um
+  // toque que já tinha acontecido ANTES da publicação, no mesmo dia,
+  // sendo contado como se tivesse acontecido depois).
+  const afterCall = isCryptoAsset
+    ? candles.filter((c) => new Date(c.date).getTime() >= createdAtDate.getTime())
+    : candles.filter((c) => c.date > createdAtDate.toISOString().slice(0, 10));
+
   const historyHit = afterCall.some((c) =>
     post.direcao === 'alta' ? c.high >= post.nivelAlvo! : c.low <= post.nivelAlvo!
   );
